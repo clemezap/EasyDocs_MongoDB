@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compartidos conmigo · EasyDocs</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+    <div class="app" data-pagina="compartidos" hidden>
+        <aside class="barra-lateral" id="barra-lateral"></aside>
+
+        <main class="contenido">
+            <header class="contenido-encabezado">
+                <h1>Compartidos conmigo</h1>
+            </header>
+
+            <section class="lista">
+                <div class="fila fila-encabezado">
+                    <span>Nombre</span>
+                    <span class="col-extra">Propietario</span>
+                    <span class="col-extra">Compartido</span>
+                    <span></span>
+                </div>
+
+                <ul class="lista-elementos" id="lista-elementos"></ul>
+
+                <p class="lista-vacia" id="lista-vacia" hidden>Nadie ha compartido archivos contigo.</p>
+            </section>
+        </main>
+    </div>
+
+    <!-- Menú de opciones de un elemento (⋮) -->
+    <div class="menu-opciones" id="menu-opciones" role="menu" hidden>
+        <button type="button" role="menuitem" data-accion="descargar" data-tipos="archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            <span>Descargar</span>
+        </button>
+        <button type="button" role="menuitem" data-accion="renombrar" data-tipos="archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+            <span>Renombrar</span>
+        </button>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/utilidades.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/compartidos.js"></script>
+</body>
+</html>

@@ -1,0 +1,1023 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --fondo: #f8f9fa;
+    --superficie: #ffffff;
+    --texto: #202124;
+    --texto-suave: #5f6368;
+    --borde: #dadce0;
+    --primario: #1a73e8;
+    --primario-hover: #1765cc;
+    --error: #d93025;
+    --seleccion: #e8f0fe;
+    --hover: #f1f3f4;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    min-height: 100vh;
+}
+
+.centrado {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+a {
+    color: var(--primario);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Formularios de login y registro */
+.tarjeta {
+    width: 100%;
+    max-width: 400px;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 40px 32px;
+}
+
+.logo {
+    font-size: 1.5rem;
+    color: var(--primario);
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.tarjeta h2 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+    margin-bottom: 4px;
+}
+
+input {
+    font: inherit;
+    padding: 10px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 4px;
+    margin-bottom: 16px;
+}
+
+input:focus {
+    outline: 2px solid var(--primario);
+    border-color: transparent;
+}
+
+.boton {
+    font: inherit;
+    font-weight: 500;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 4px;
+    background: var(--primario);
+    color: #fff;
+    cursor: pointer;
+}
+
+.boton:hover {
+    background: var(--primario-hover);
+}
+
+.boton:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.boton-secundario {
+    background: transparent;
+    color: var(--primario);
+    border: 1px solid var(--borde);
+}
+
+.boton-secundario:hover {
+    background: #f1f3f4;
+}
+
+.error {
+    color: var(--error);
+    font-size: 0.875rem;
+    margin-bottom: 16px;
+}
+
+.pie {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+}
+
+/* Página de mensaje (ej. enlace no disponible) */
+.tarjeta-mensaje {
+    text-align: center;
+}
+
+.tarjeta-mensaje p {
+    color: var(--texto-suave);
+    line-height: 1.5;
+}
+
+.icono-mensaje {
+    width: 48px;
+    height: 48px;
+    margin: 16px auto;
+    color: var(--texto-suave);
+}
+
+/* Estructura de la aplicación: barra lateral + contenido */
+.app {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    min-height: 100vh;
+    padding: 16px;
+}
+
+.barra-lateral,
+.contenido {
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 16px;
+}
+
+/* Barra lateral */
+.marca {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    margin-bottom: 24px;
+    color: var(--primario);
+    font-size: 1.375rem;
+    font-weight: 600;
+}
+
+.marca:hover {
+    text-decoration: none;
+}
+
+.marca svg {
+    width: 28px;
+    height: 28px;
+}
+
+.barra-lateral {
+    display: flex;
+    flex-direction: column;
+    padding: 24px 16px;
+    position: sticky;
+    top: 16px;
+    height: calc(100vh - 32px);
+}
+
+.perfil {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+    margin-bottom: 40px;
+}
+
+.avatar {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primario);
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.perfil-datos {
+    min-width: 0;
+}
+
+.perfil-nombre {
+    font-weight: 500;
+}
+
+.perfil-correo {
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+}
+
+.perfil-nombre,
+.perfil-correo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.menu-enlace {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    color: var(--texto);
+}
+
+.menu-enlace:hover {
+    background: var(--hover);
+    text-decoration: none;
+}
+
+.menu-enlace[aria-current="page"] {
+    background: var(--seleccion);
+    color: var(--primario);
+    font-weight: 500;
+}
+
+svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+svg .relleno {
+    fill: currentColor;
+    stroke: none;
+}
+
+.boton-logout {
+    margin-top: auto;
+    align-self: flex-start;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--borde);
+    background: transparent;
+    color: var(--texto-suave);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.boton-logout:hover {
+    background: var(--hover);
+    color: var(--error);
+}
+
+/* Contenido */
+.contenido {
+    padding: 24px 32px;
+    min-width: 0;
+}
+
+.contenido-encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.contenido-encabezado h1 {
+    font-size: 1.5rem;
+    font-weight: 400;
+}
+
+/* Lista de archivos y carpetas */
+.lista-elementos {
+    list-style: none;
+}
+
+.fila {
+    display: grid;
+    grid-template-columns: 1fr 200px 120px 36px;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.fila > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fila-encabezado {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--texto-suave);
+}
+
+.lista-elementos .fila:hover {
+    background: var(--hover);
+}
+
+.col-extra {
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+}
+
+.lista-vacia {
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+/* Ruta de navegación (Principal > Carpeta > Subcarpeta) */
+.ruta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-width: 0;
+    font-size: 1.5rem;
+}
+
+.ruta svg {
+    color: var(--texto-suave);
+}
+
+.ruta-enlace {
+    font: inherit;
+    color: var(--texto-suave);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.ruta-enlace:hover {
+    background: var(--hover);
+    color: var(--texto);
+}
+
+.ruta-actual {
+    padding: 2px 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.acciones {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.boton-con-icono {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Elementos de la lista */
+.nombre-elemento {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.nombre-texto,
+.abrir-elemento {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.icono-carpeta,
+.icono-archivo {
+    display: flex;
+    color: var(--texto-suave);
+}
+
+.abrir-elemento {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.abrir-elemento:hover {
+    text-decoration: underline;
+}
+
+.lista-elementos .fila {
+    user-select: none;
+}
+
+.boton-icono {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--texto-suave);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.boton-icono:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--texto);
+}
+
+/* Color del icono según el tipo de archivo */
+.tipo-pdf { color: #d93025; }
+.tipo-imagen { color: #e37400; }
+.tipo-multimedia { color: #a142f4; }
+.tipo-hoja { color: #188038; }
+.tipo-documento { color: var(--primario); }
+.tipo-presentacion { color: #f29900; }
+.tipo-comprimido { color: #5f6368; }
+
+/* Zona para soltar archivos (arrastrar y soltar) */
+.lista {
+    position: relative;
+}
+
+.zona-soltar {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 200px;
+    background: rgba(232, 240, 254, 0.9);
+    border: 2px dashed var(--primario);
+    border-radius: 12px;
+    color: var(--primario);
+    font-weight: 500;
+    pointer-events: none;
+}
+
+.zona-soltar svg {
+    width: 40px;
+    height: 40px;
+}
+
+/* Panel de progreso de subidas */
+.panel-subidas {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    width: min(360px, calc(100% - 32px));
+    max-height: 50vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--superficie);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.panel-subidas header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 8px 16px;
+    background: #f1f3f4;
+}
+
+.panel-subidas h2 {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.panel-subidas ul {
+    list-style: none;
+    overflow-y: auto;
+}
+
+.subida {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--borde);
+    font-size: 0.875rem;
+}
+
+.subida-nombre {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subida-estado {
+    display: flex;
+}
+
+.subida progress {
+    width: 64px;
+    height: 6px;
+    accent-color: var(--primario);
+}
+
+.subida-lista .subida-estado {
+    color: #188038;
+}
+
+.subida-fallida .subida-estado {
+    color: var(--error);
+}
+
+.subida-error {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--error);
+}
+
+/* Botón para acciones que no se pueden deshacer */
+.boton-peligro {
+    background: var(--error);
+}
+
+.boton-peligro:hover {
+    background: #b3261e;
+}
+
+.nota {
+    margin: -8px 0 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--hover);
+    color: var(--texto-suave);
+    font-size: 0.875rem;
+}
+
+/* Aviso temporal (abajo al centro) */
+.aviso {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 16px;
+    width: max-content;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: calc(100% - 32px);
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #323232;
+    color: #fff;
+    font-size: 0.875rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.aviso button {
+    flex-shrink: 0;
+    font: inherit;
+    font-weight: 500;
+    color: #8ab4f8;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.dialogo-mensaje {
+    margin-bottom: 24px;
+    color: var(--texto-suave);
+    line-height: 1.5;
+}
+
+/* Ventana "Compartir" */
+/* Doble clase: debe ganarle a .dialogo, que está definido más abajo */
+.dialogo.dialogo-compartir {
+    max-width: 520px;
+}
+
+.dialogo-compartir h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dialogo-compartir h3 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin: 20px 0 8px;
+}
+
+.compartir-form {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+}
+
+.compartir-form input {
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+select {
+    font: inherit;
+    padding: 9px 8px;
+    border: 1px solid var(--borde);
+    border-radius: 4px;
+    background: var(--superficie);
+    color: var(--texto);
+}
+
+.compartir-ayuda {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--texto-suave);
+}
+
+.dialogo-compartir .error {
+    margin: 8px 0 0;
+}
+
+.personas {
+    list-style: none;
+    max-height: 260px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+}
+
+.persona {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.avatar-chico {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+}
+
+.persona-datos {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.persona-nombre,
+.persona-correo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.persona-correo {
+    font-size: 0.8rem;
+    color: var(--texto-suave);
+}
+
+.persona-rol {
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+}
+
+.persona-permiso {
+    padding: 6px;
+    font-size: 0.875rem;
+}
+
+@media (max-width: 480px) {
+    .compartir-form {
+        grid-template-columns: 1fr auto;
+    }
+
+    .compartir-form input {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Marcas junto al nombre: compartido / enlace público */
+.marca-acceso {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--texto-suave);
+}
+
+.marca-acceso svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Sección "Enlace público" de la ventana Compartir */
+.enlace-estado {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 0.875rem;
+    color: var(--texto-suave);
+}
+
+.enlace-activo {
+    color: #188038;
+}
+
+.enlace-fila {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.enlace-fila input {
+    margin-bottom: 0;
+    min-width: 0;
+    font-size: 0.875rem;
+    background: var(--fondo);
+}
+
+.enlace-publico {
+    margin-bottom: 20px;
+}
+
+.boton-texto {
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--primario);
+    cursor: pointer;
+}
+
+.boton-texto-peligro {
+    color: var(--error);
+}
+
+.boton-texto:hover {
+    text-decoration: underline;
+}
+
+/* Ventana "Mover" */
+.dialogo.dialogo-mover {
+    max-width: 480px;
+}
+
+/* Doble clase: debe ganarle a .ruta en pantallas pequeñas */
+.ruta.ruta-mover {
+    font-size: 1rem;
+    margin-bottom: 8px;
+}
+
+.mover-carpetas {
+    list-style: none;
+    height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.mover-carpeta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    color: var(--texto);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--borde);
+    text-align: left;
+    cursor: pointer;
+}
+
+.mover-carpeta:hover:not(:disabled) {
+    background: var(--hover);
+}
+
+.mover-carpeta:disabled {
+    color: var(--texto-suave);
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.mover-carpeta .nombre-texto {
+    flex: 1;
+    min-width: 0;
+}
+
+.mover-carpeta > svg {
+    color: var(--texto-suave);
+}
+
+.mover-vacio {
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--texto-suave);
+}
+
+/* Menú de opciones (⋮) */
+.menu-opciones {
+    position: absolute;
+    z-index: 10;
+    min-width: 180px;
+    padding: 8px 0;
+    background: var(--superficie);
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.menu-opciones button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 16px;
+    font: inherit;
+    font-size: 0.875rem;
+    color: var(--texto);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.menu-opciones button:hover {
+    background: var(--hover);
+}
+
+.menu-opciones svg {
+    color: var(--texto-suave);
+}
+
+.menu-opciones hr {
+    margin: 8px 0;
+    border: none;
+    border-top: 1px solid var(--borde);
+}
+
+/* Diálogo (crear / renombrar) */
+.dialogo {
+    margin: auto;
+    width: calc(100% - 32px);
+    max-width: 400px;
+    padding: 24px;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.dialogo::backdrop {
+    background: rgba(32, 33, 36, 0.4);
+}
+
+.dialogo h2 {
+    font-size: 1.25rem;
+    font-weight: 400;
+    margin-bottom: 16px;
+}
+
+.dialogo-botones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Pantallas pequeñas: la barra lateral pasa arriba */
+@media (max-width: 768px) {
+    .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .barra-lateral {
+        position: static;
+        height: auto;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        row-gap: 16px;
+    }
+
+    .marca {
+        margin-bottom: 0;
+        padding: 0;
+    }
+
+    .perfil {
+        grid-column: 1 / -1;
+        margin-bottom: 0;
+        padding: 0;
+        min-width: 0;
+    }
+
+    .avatar {
+        width: 40px;
+        height: 40px;
+        font-size: 1.1rem;
+    }
+
+    .boton-logout {
+        grid-column: 2;
+        grid-row: 1;
+        margin-top: 0;
+    }
+
+    .menu {
+        grid-column: 1 / -1;
+        flex-direction: row;
+    }
+
+    .menu-enlace {
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 4px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        text-align: center;
+    }
+
+    .contenido {
+        padding: 16px;
+    }
+
+    .contenido-encabezado h1 {
+        font-size: 1.25rem;
+    }
+
+    .boton-con-icono span {
+        display: none;
+    }
+
+    .boton-con-icono {
+        padding: 10px;
+    }
+
+    .contenido-encabezado {
+        flex-wrap: wrap;
+    }
+
+    .ruta {
+        font-size: 1.25rem;
+    }
+
+    .fila {
+        grid-template-columns: 1fr 36px;
+        padding: 12px 8px;
+    }
+
+    .col-extra {
+        display: none;
+    }
+}

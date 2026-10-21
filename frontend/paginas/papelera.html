@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Papelera · EasyDocs</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+    <div class="app" data-pagina="papelera" hidden>
+        <aside class="barra-lateral" id="barra-lateral"></aside>
+
+        <main class="contenido">
+            <header class="contenido-encabezado">
+                <h1>Papelera</h1>
+
+                <div class="acciones">
+                    <button type="button" class="boton boton-secundario boton-con-icono" id="btn-vaciar" hidden>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+                        <span>Vaciar papelera</span>
+                    </button>
+                </div>
+            </header>
+
+            <p class="nota">Los elementos de la papelera se pueden restaurar a su ubicación original. Si eliminas algo definitivamente, ya no se podrá recuperar.</p>
+
+            <section class="lista">
+                <div class="fila fila-encabezado">
+                    <span>Nombre</span>
+                    <span class="col-extra">Eliminado</span>
+                    <span class="col-extra">Tamaño</span>
+                    <span></span>
+                </div>
+
+                <ul class="lista-elementos" id="lista-elementos"></ul>
+
+                <p class="lista-vacia" id="lista-vacia" hidden>La papelera está vacía.</p>
+            </section>
+        </main>
+    </div>
+
+    <!-- Menú de opciones de un elemento (⋮) -->
+    <div class="menu-opciones" id="menu-opciones" role="menu" hidden>
+        <button type="button" role="menuitem" data-accion="restaurar" data-tipos="carpeta archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/></svg>
+            <span>Restaurar</span>
+        </button>
+        <hr>
+        <button type="button" role="menuitem" data-accion="eliminar" data-tipos="carpeta archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+            <span>Eliminar definitivamente</span>
+        </button>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/utilidades.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/papelera.js"></script>
+</body>
+</html>

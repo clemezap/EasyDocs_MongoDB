@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyDocs</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+    <div class="app" data-pagina="principal" hidden>
+        <aside class="barra-lateral" id="barra-lateral"></aside>
+
+        <main class="contenido">
+            <header class="contenido-encabezado">
+                <nav class="ruta" id="ruta" aria-label="Ubicación"></nav>
+
+                <div class="acciones">
+                    <button type="button" class="boton boton-secundario boton-con-icono" id="btn-subir">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                        <span>Subir archivos</span>
+                    </button>
+                    <input type="file" id="input-archivos" multiple hidden>
+
+                    <button type="button" class="boton boton-con-icono" id="btn-nueva-carpeta">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.2a2 2 0 0 1 1.4.6L12 6h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></svg>
+                        <span>Nueva carpeta</span>
+                    </button>
+                </div>
+            </header>
+
+            <section class="lista" id="zona-lista">
+                <div class="zona-soltar" id="zona-soltar" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                    <p>Suelta los archivos para subirlos aquí</p>
+                </div>
+
+                <div class="fila fila-encabezado">
+                    <span>Nombre</span>
+                    <span class="col-extra">Última modificación</span>
+                    <span class="col-extra">Tamaño</span>
+                    <span></span>
+                </div>
+
+                <ul class="lista-elementos" id="lista-elementos"></ul>
+
+                <p class="lista-vacia" id="lista-vacia" hidden></p>
+            </section>
+        </main>
+    </div>
+
+    <!-- Menú de opciones de un elemento (⋮) -->
+    <!-- data-tipos: en qué elementos aparece cada opción -->
+    <div class="menu-opciones" id="menu-opciones" role="menu" hidden>
+        <button type="button" role="menuitem" data-accion="descargar" data-tipos="archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            <span>Descargar</span>
+        </button>
+        <button type="button" role="menuitem" data-accion="compartir" data-tipos="archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></svg>
+            <span>Compartir</span>
+        </button>
+        <button type="button" role="menuitem" data-accion="renombrar" data-tipos="carpeta archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+            <span>Renombrar</span>
+        </button>
+        <button type="button" role="menuitem" data-accion="mover" data-tipos="carpeta archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.2a2 2 0 0 1 1.4.6L12 6h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6M13 10.5l2.5 2.5-2.5 2.5"/></svg>
+            <span>Mover</span>
+        </button>
+        <hr>
+        <button type="button" role="menuitem" data-accion="papelera" data-tipos="carpeta archivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+            <span>Enviar a papelera</span>
+        </button>
+    </div>
+
+    <!-- Progreso de las subidas -->
+    <section class="panel-subidas" id="panel-subidas" aria-live="polite" hidden>
+        <header>
+            <h2 id="panel-subidas-titulo">Subiendo archivos</h2>
+            <button type="button" class="boton-icono" id="panel-subidas-cerrar" aria-label="Cerrar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </header>
+        <ul id="panel-subidas-lista"></ul>
+    </section>
+
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/utilidades.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/compartir.js"></script>
+    <script src="/js/mover.js"></script>
+    <script src="/js/principal.js"></script>
+</body>
+</html>

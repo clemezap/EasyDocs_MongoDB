@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear cuenta · EasyDocs</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body class="centrado">
+    <main class="tarjeta">
+        <h1 class="logo">EasyDocs</h1>
+        <h2>Crear cuenta</h2>
+
+        <form id="form-registro" novalidate>
+            <label for="nombre">Nombre</label>
+            <input type="text" id="nombre" name="nombre" maxlength="150" autocomplete="name" required>
+
+            <label for="correo">Correo</label>
+            <input type="email" id="correo" name="correo" maxlength="255" autocomplete="email" required>
+
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password" minlength="8" autocomplete="new-password" required>
+
+            <label for="password_confirmation">Repetir contraseña</label>
+            <input type="password" id="password_confirmation" name="password_confirmation" minlength="8" autocomplete="new-password" required>
+
+            <p id="error" class="error" hidden></p>
+
+            <button type="submit" class="boton">Registrarme</button>
+        </form>
+
+        <p class="pie">¿Ya tienes cuenta? <a href="/paginas/login.html">Inicia sesión</a></p>
+    </main>
+
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/registro.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión · EasyDocs</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body class="centrado">
+    <main class="tarjeta">
+        <h1 class="logo">EasyDocs</h1>
+        <h2>Iniciar sesión</h2>
+
+        <form id="form-login" novalidate>
+            <label for="correo">Correo</label>
+            <input type="email" id="correo" name="correo" autocomplete="email" required>
+
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+            <p id="error" class="error" hidden></p>
+
+            <button type="submit" class="boton">Entrar</button>
+        </form>
+
+        <p class="pie">¿No tienes cuenta? <a href="/paginas/registro.html">Regístrate</a></p>
+    </main>
+
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/login.js"></script>
+</body>
+</html>
