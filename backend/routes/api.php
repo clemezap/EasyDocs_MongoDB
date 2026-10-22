@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CarpetaController;
 use App\Http\Controllers\CompartirController;
 use App\Http\Controllers\EnlacePublicoController;
+use App\Http\Controllers\MetadatosController;
 use App\Http\Controllers\PapeleraController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,10 @@ Route::middleware('web')->group(function () {
         Route::get('/archivos/{id}/descargar', [ArchivoController::class, 'descargar']);
         Route::patch('/archivos/{id}', [ArchivoController::class, 'renombrar']);
         Route::patch('/archivos/{id}/mover', [ArchivoController::class, 'mover']);
+
+        // Metadatos (propiedades opcionales del archivo)
+        Route::get('/archivos/{id}/metadatos', [MetadatosController::class, 'ver']);
+        Route::patch('/archivos/{id}/metadatos', [MetadatosController::class, 'guardar']);
 
         // Compartir con otros usuarios
         Route::get('/compartidos', [CompartirController::class, 'conmigo']);

@@ -930,6 +930,165 @@ select {
     gap: 8px;
 }
 
+/* Metadatos: filas nombre / tipo / valor (toast al subir y ventana "Propiedades") */
+.metadatos-filas {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.metadato {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) auto minmax(0, 1.3fr) auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.metadato input,
+.metadato select {
+    margin-bottom: 0;
+    min-width: 0;
+    padding: 7px 8px;
+    font-size: 0.875rem;
+}
+
+.metadato .boton-icono {
+    width: 32px;
+    height: 32px;
+}
+
+.metadatos-filas + .boton-texto,
+[data-propiedades="agregar"] {
+    margin-top: 4px;
+}
+
+/* Toast al subir archivos (abajo a la izquierda; el progreso va a la derecha) */
+.toast-metadatos {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 25;
+    width: min(480px, calc(100% - 32px));
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
+    background: var(--superficie);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.toast-metadatos header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 8px 16px;
+    background: #f1f3f4;
+}
+
+.toast-metadatos h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.toast-metadatos h2 svg {
+    width: 18px;
+    height: 18px;
+    color: var(--primario);
+}
+
+.toast-metadatos h2 span {
+    color: var(--texto-suave);
+    font-weight: 400;
+}
+
+.toast-metadatos-cuerpo {
+    padding: 12px 16px 4px;
+    overflow-y: auto;
+}
+
+.toast-metadatos-ayuda,
+.propiedades-nota {
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    color: var(--texto-suave);
+}
+
+.toast-metadatos .error {
+    margin: 4px 0 8px;
+}
+
+.toast-metadatos footer {
+    padding: 8px 16px 16px;
+}
+
+/* Ventana "Propiedades" */
+.dialogo.dialogo-propiedades {
+    max-width: 560px;
+}
+
+.propiedades-cuerpo {
+    max-height: 60vh;
+    margin-bottom: 16px;
+    overflow-y: auto;
+}
+
+.dialogo-propiedades .error {
+    margin: -8px 0 16px;
+}
+
+.propiedades-lista {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+
+.propiedades-lista dt {
+    color: var(--texto-suave);
+}
+
+.propiedades-lista dd {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+    /* Tipo y valor pasan a una segunda línea */
+    .metadato {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .metadato .metadato-clave {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .metadato .metadato-quitar {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .metadato .metadato-tipo {
+        grid-column: 1 / -1;
+    }
+
+    .metadato .metadato-valor {
+        grid-column: 1 / -1;
+    }
+
+    /* El toast arriba para no tapar el progreso de la subida */
+    .toast-metadatos {
+        top: 16px;
+        bottom: auto;
+        max-height: 60vh;
+    }
+}
+
 /* Pantallas pequeñas: la barra lateral pasa arriba */
 @media (max-width: 768px) {
     .app {

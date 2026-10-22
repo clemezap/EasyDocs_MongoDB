@@ -17,6 +17,7 @@ const ICONOS = {
     compartir: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/>',
     enlace: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
     personas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2A5 5 0 0 1 21.5 19"/>',
+    etiqueta: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
 };
 
 // Categoría de un archivo según su extensión o su tipo MIME (para el color de su icono)
@@ -57,7 +58,7 @@ function escaparHtml(texto) {
     return div.innerHTML;
 }
 
-// MySQL devuelve "2026-09-30 15:13:47" en UTC
+// La API devuelve "2026-09-30 15:13:47" en UTC
 function formatearFecha(valor) {
     if (!valor) return '—';
 
@@ -118,7 +119,7 @@ function filaElemento(el, { fecha, carpetaAbrible = false, columnas }) {
 }
 
 // Iconos junto al nombre: compartido con personas y/o con enlace público activo.
-// MySQL devuelve EXISTS como "0"/"1" (texto), por eso se convierte a número.
+// La API los devuelve como true/false; Number() también acepta "0"/"1".
 function marcasAcceso(el) {
     let marcas = '';
 

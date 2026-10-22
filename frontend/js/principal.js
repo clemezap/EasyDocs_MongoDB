@@ -1,5 +1,5 @@
 // Página Principal: navegación por carpetas; crear, renombrar y enviar a la papelera;
-// mover carpetas y archivos; subir, descargar y compartir archivos.
+// mover carpetas y archivos; subir, descargar y compartir archivos; propiedades (metadatos).
 
 (async function () {
     const usuario = await sesion;
@@ -109,6 +109,10 @@
 
             case 'compartir':
                 abrirCompartir(elemento, cargar);
+                break;
+
+            case 'propiedades':
+                abrirPropiedades(elemento, cargar);
                 break;
 
             case 'renombrar':
@@ -234,6 +238,15 @@
         panel.hidden = false;
         actualizarTituloPanel();
 
+        // Toast para agregar propiedades mientras se sube; recibe los ids al terminar
+        const subidos = [];
+        let terminarSubida;
+        agregarAlToastMetadatos(
+            archivos.length,
+            new Promise((resolve) => { terminarSubida = resolve; }),
+            () => { if (destino === carpetaActual) cargar(); }
+        );
+
         for (let i = 0; i < archivos.length; i++) {
             const fila = filas[i];
             const barra = fila.querySelector('progress');
@@ -248,6 +261,7 @@
             const estado = fila.querySelector('.subida-estado');
 
             if (ok) {
+                subidos.push(datos.archivo.id);
                 fila.classList.add('subida-lista');
                 estado.innerHTML = icono(ICONOS.listo);
                 if (destino === carpetaActual) cargar();
@@ -259,6 +273,8 @@
                 error.hidden = false;
             }
         }
+
+        terminarSubida(subidos);
     }
 
     function actualizarTituloPanel() {

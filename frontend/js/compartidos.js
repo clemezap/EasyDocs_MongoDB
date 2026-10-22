@@ -1,5 +1,6 @@
 // Página "Compartidos conmigo": archivos de otros usuarios a los que tengo acceso.
-// Con permiso de lectura solo se descargan; con escritura también se pueden renombrar.
+// Con permiso de lectura solo se descargan y se ven sus propiedades; con escritura
+// también se pueden renombrar y editar sus propiedades.
 
 (async function () {
     const usuario = await sesion;
@@ -40,6 +41,8 @@
         opcionVisible: (accion, el) => accion !== 'renombrar' || el.permiso === 'escritura',
         alElegir: async (accion, elemento) => {
             if (accion === 'descargar') descargarArchivo(elemento.id);
+            // Con lectura se ven sin poder editarlas (la API dice si son editables)
+            if (accion === 'propiedades') abrirPropiedades(elemento);
             if (accion === 'renombrar' && await renombrarElemento(elemento)) cargar();
         },
     });
