@@ -13,7 +13,12 @@ class Autenticado
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->session()->has('usuario')) {
+        $id = $request->session()->get('usuario')['id'] ?? null;
+
+        // Sesiones de la versión con MySQL guardaban un id numérico: ya no sirven
+        if (! is_string($id) || ! preg_match('/^[a-f0-9]{24}$/', $id)) {
+            $request->session()->forget('usuario');
+
             return response()->json(['message' => 'No has iniciado sesión.'], 401);
         }
 

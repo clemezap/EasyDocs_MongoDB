@@ -4,19 +4,25 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use MongoDB\BSON\ObjectId;
+use MongoDB\Client;
+use MongoDB\Driver\Session;
+
+use function MongoDB\with_transaction;
 
 /**
  * Papelera (eliminación lógica en cascada).
  *
- * - Enviar una carpeta a la papelera marca papelera = 1 en ella y en TODO su contenido
+ * - Enviar una carpeta a la papelera marca papelera = true en ella y en TODO su contenido
  *   activo (subcarpetas y archivos, a cualquier profundidad), con la misma fecha_papelera.
  * - fecha_papelera identifica cada operación: al restaurar solo regresa lo que se
  *   eliminó junto con el elemento. Lo que ya estaba en la papelera se queda ahí.
  * - Si la carpeta original de un elemento ya no está activa, se restaura en la raíz.
- * - Eliminar definitivamente borra los registros (en cascada) y los objetos de S3.
+ * - Eliminar definitivamente borra los documentos y los archivos del disco. Sin llaves
+ *   foráneas no hay cascada automática: el contenido se borra explícitamente.
+ * - Las operaciones de varios documentos van en una transacción (Atlas es un replica set).
  */
 class PapeleraController extends Controller
 {
@@ -28,27 +34,24 @@ class PapeleraController extends Controller
     {
         $usuarioId = $this->usuarioId($request);
 
-        $carpetas = DB::select(
-            'SELECT c.id, c.nombre, c.fecha_papelera
-             FROM carpetas c
-             LEFT JOIN carpetas p ON p.id = c.carpeta_padre
-             WHERE c.usuario_id = ? AND c.papelera = 1
-               AND (p.id IS NULL OR p.papelera = 0 OR p.fecha_papelera <> c.fecha_papelera)
-             ORDER BY c.fecha_papelera DESC, c.nombre',
-            [$usuarioId]
-        );
+        $carpetas = $this->base->carpetas->aggregate([
+            ['$match' => ['usuario_id' => $usuarioId, 'papelera' => true]],
+            ...$this->soloPrincipales(),
+            ['$sort' => ['fecha_papelera' => -1, 'nombre' => 1]],
+            ['$project' => ['nombre' => 1, 'fecha_papelera' => 1]],
+        ]);
 
-        $archivos = DB::select(
-            'SELECT a.id, a.nombre, a.tipo_mime, a.tamano, a.fecha_papelera
-             FROM archivos a
-             LEFT JOIN carpetas p ON p.id = a.carpeta_padre
-             WHERE a.usuario_id = ? AND a.papelera = 1
-               AND (p.id IS NULL OR p.papelera = 0 OR p.fecha_papelera <> a.fecha_papelera)
-             ORDER BY a.fecha_papelera DESC, a.nombre',
-            [$usuarioId]
-        );
+        $archivos = $this->base->archivos->aggregate([
+            ['$match' => ['usuario_id' => $usuarioId, 'papelera' => true]],
+            ...$this->soloPrincipales(),
+            ['$sort' => ['fecha_papelera' => -1, 'nombre' => 1]],
+            ['$project' => ['nombre' => 1, 'tipo_mime' => 1, 'tamano' => 1, 'fecha_papelera' => 1]],
+        ]);
 
-        return response()->json(['carpetas' => $carpetas, 'archivos' => $archivos]);
+        return response()->json([
+            'carpetas' => $this->json($carpetas->toArray()),
+            'archivos' => $this->json($archivos->toArray()),
+        ]);
     }
 
     // ---------------------------------------------------------------------
@@ -63,23 +66,23 @@ class PapeleraController extends Controller
             return $this->noEncontrado('La carpeta no existe.');
         }
 
-        DB::transaction(function () use ($id, $usuarioId) {
-            $fecha = now()->format('Y-m-d H:i:s');
+        $this->transaccion(function (Session $sesion) use ($id, $usuarioId) {
+            $fecha = $this->ahora();
+            $marca = ['papelera' => true, 'fecha_papelera' => $fecha, 'actualizado_en' => $fecha];
 
             // La carpeta y sus subcarpetas que siguen activas
-            $ids = $this->idsDescendientes($id, 'c.papelera = 0');
-            $marcas = $this->marcas($ids);
+            $ids = $this->idsDescendientes($id, ['papelera' => false], $sesion);
 
-            DB::update(
-                "UPDATE carpetas SET papelera = 1, fecha_papelera = ?
-                 WHERE usuario_id = ? AND id IN ($marcas)",
-                [$fecha, $usuarioId, ...$ids]
+            $this->base->carpetas->updateMany(
+                ['usuario_id' => $usuarioId, '_id' => ['$in' => $ids]],
+                ['$set' => $marca],
+                ['session' => $sesion]
             );
 
-            DB::update(
-                "UPDATE archivos SET papelera = 1, fecha_papelera = ?
-                 WHERE usuario_id = ? AND papelera = 0 AND carpeta_padre IN ($marcas)",
-                [$fecha, $usuarioId, ...$ids]
+            $this->base->archivos->updateMany(
+                ['usuario_id' => $usuarioId, 'papelera' => false, 'carpeta_padre' => ['$in' => $ids]],
+                ['$set' => $marca],
+                ['session' => $sesion]
             );
         });
 
@@ -88,13 +91,14 @@ class PapeleraController extends Controller
 
     public function enviarArchivo(Request $request, string $id): JsonResponse
     {
-        $actualizados = DB::update(
-            'UPDATE archivos SET papelera = 1, fecha_papelera = ?
-             WHERE id = ? AND usuario_id = ? AND papelera = 0',
-            [now()->format('Y-m-d H:i:s'), $id, $this->usuarioId($request)]
+        $fecha = $this->ahora();
+
+        $resultado = $this->base->archivos->updateOne(
+            ['_id' => $id, 'usuario_id' => $this->usuarioId($request), 'papelera' => false],
+            ['$set' => ['papelera' => true, 'fecha_papelera' => $fecha, 'actualizado_en' => $fecha]]
         );
 
-        if ($actualizados === 0) {
+        if ($resultado->getMatchedCount() === 0) {
             return $this->noEncontrado('El archivo no existe.');
         }
 
@@ -116,37 +120,42 @@ class PapeleraController extends Controller
 
         $enRaiz = false;
 
-        DB::transaction(function () use ($carpeta, $usuarioId, &$enRaiz) {
+        $this->transaccion(function (Session $sesion) use ($carpeta, $usuarioId, &$enRaiz) {
             $destino = $this->destinoRestauracion($carpeta->carpeta_padre, $usuarioId);
             $enRaiz = $carpeta->carpeta_padre !== null && $destino === null;
+            $ahora = $this->ahora();
 
             // Si ya existe una carpeta activa con ese nombre en el destino, se renombra
             $nombre = $this->nombreLibre($carpeta->nombre, $destino, $usuarioId);
 
-            DB::update(
-                'UPDATE carpetas SET carpeta_padre = ?, nombre = ? WHERE id = ?',
-                [$destino, $nombre, $carpeta->id]
+            $this->base->carpetas->updateOne(
+                ['_id' => $carpeta->_id],
+                ['$set' => ['carpeta_padre' => $destino, 'nombre' => $nombre]],
+                ['session' => $sesion]
             );
 
             // Solo lo que se eliminó en la misma operación (misma fecha_papelera)
             $ids = $this->idsDescendientes(
-                $carpeta->id,
-                'c.papelera = 1 AND c.fecha_papelera = ?',
-                [$carpeta->fecha_papelera]
-            );
-            $marcas = $this->marcas($ids);
-
-            DB::update(
-                "UPDATE carpetas SET papelera = 0, fecha_papelera = NULL
-                 WHERE usuario_id = ? AND id IN ($marcas)",
-                [$usuarioId, ...$ids]
+                $carpeta->_id,
+                ['papelera' => true, 'fecha_papelera' => $carpeta->fecha_papelera],
+                $sesion
             );
 
-            DB::update(
-                "UPDATE archivos SET papelera = 0, fecha_papelera = NULL
-                 WHERE usuario_id = ? AND papelera = 1 AND fecha_papelera = ?
-                   AND carpeta_padre IN ($marcas)",
-                [$usuarioId, $carpeta->fecha_papelera, ...$ids]
+            $this->base->carpetas->updateMany(
+                ['usuario_id' => $usuarioId, '_id' => ['$in' => $ids]],
+                ['$set' => ['papelera' => false, 'fecha_papelera' => null, 'actualizado_en' => $ahora]],
+                ['session' => $sesion]
+            );
+
+            $this->base->archivos->updateMany(
+                [
+                    'usuario_id' => $usuarioId,
+                    'papelera' => true,
+                    'fecha_papelera' => $carpeta->fecha_papelera,
+                    'carpeta_padre' => ['$in' => $ids],
+                ],
+                ['$set' => ['papelera' => false, 'fecha_papelera' => null, 'actualizado_en' => $ahora]],
+                ['session' => $sesion]
             );
         });
 
@@ -161,9 +170,9 @@ class PapeleraController extends Controller
     {
         $usuarioId = $this->usuarioId($request);
 
-        $archivo = DB::selectOne(
-            'SELECT id, carpeta_padre FROM archivos WHERE id = ? AND usuario_id = ? AND papelera = 1',
-            [$id, $usuarioId]
+        $archivo = $this->base->archivos->findOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId, 'papelera' => true],
+            ['projection' => ['carpeta_padre' => 1]]
         );
 
         if (! $archivo) {
@@ -172,9 +181,14 @@ class PapeleraController extends Controller
 
         $destino = $this->destinoRestauracion($archivo->carpeta_padre, $usuarioId);
 
-        DB::update(
-            'UPDATE archivos SET papelera = 0, fecha_papelera = NULL, carpeta_padre = ? WHERE id = ?',
-            [$destino, $archivo->id]
+        $this->base->archivos->updateOne(
+            ['_id' => $archivo->_id],
+            ['$set' => [
+                'papelera' => false,
+                'fecha_papelera' => null,
+                'carpeta_padre' => $destino,
+                'actualizado_en' => $this->ahora(),
+            ]]
         );
 
         return response()->json([
@@ -198,26 +212,21 @@ class PapeleraController extends Controller
 
         // Todo lo que está dentro, sin importar cuándo se eliminó
         $ids = $this->idsDescendientes($id);
-        $marcas = $this->marcas($ids);
+        $filtroArchivos = ['usuario_id' => $usuarioId, 'carpeta_padre' => ['$in' => $ids]];
 
-        $claves = array_column(DB::select(
-            "SELECT s3_key FROM archivos WHERE usuario_id = ? AND carpeta_padre IN ($marcas)",
-            [$usuarioId, ...$ids]
-        ), 's3_key');
+        $rutas = $this->rutas($filtroArchivos);
 
-        DB::transaction(function () use ($ids, $marcas, $usuarioId) {
-            DB::delete(
-                "DELETE FROM archivos WHERE usuario_id = ? AND carpeta_padre IN ($marcas)",
-                [$usuarioId, ...$ids]
-            );
-
-            $this->borrarCarpetasDeHojasARaiz(
-                "usuario_id = ? AND id IN ($marcas)",
-                [$usuarioId, ...$ids]
+        // Sin ON DELETE CASCADE: se borran los archivos y las carpetas explícitamente.
+        // Ya no hace falta borrar "de hojas a raíz" (el límite de 15 niveles era de MySQL).
+        $this->transaccion(function (Session $sesion) use ($ids, $filtroArchivos, $usuarioId) {
+            $this->base->archivos->deleteMany($filtroArchivos, ['session' => $sesion]);
+            $this->base->carpetas->deleteMany(
+                ['usuario_id' => $usuarioId, '_id' => ['$in' => $ids]],
+                ['session' => $sesion]
             );
         });
 
-        $this->borrarDeS3($claves);
+        $this->borrarDelDisco($rutas);
 
         return response()->json(['mensaje' => 'Carpeta eliminada definitivamente.']);
     }
@@ -226,17 +235,18 @@ class PapeleraController extends Controller
     {
         $usuarioId = $this->usuarioId($request);
 
-        $archivo = DB::selectOne(
-            'SELECT id, s3_key FROM archivos WHERE id = ? AND usuario_id = ? AND papelera = 1',
-            [$id, $usuarioId]
+        $archivo = $this->base->archivos->findOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId, 'papelera' => true],
+            ['projection' => ['ruta' => 1]]
         );
 
         if (! $archivo) {
             return $this->noEncontrado('El archivo no está en la papelera.');
         }
 
-        DB::delete('DELETE FROM archivos WHERE id = ?', [$archivo->id]);
-        $this->borrarDeS3([$archivo->s3_key]);
+        // Sus compartidos y enlaces están dentro del documento: se van con él
+        $this->base->archivos->deleteOne(['_id' => $archivo->_id]);
+        $this->borrarDelDisco([$archivo->ruta]);
 
         return response()->json(['mensaje' => 'Archivo eliminado definitivamente.']);
     }
@@ -246,18 +256,16 @@ class PapeleraController extends Controller
         $usuarioId = $this->usuarioId($request);
 
         // El contenido de una carpeta en la papelera también está en la papelera,
-        // así que basta con borrar todo lo que tenga papelera = 1.
-        $claves = array_column(DB::select(
-            'SELECT s3_key FROM archivos WHERE usuario_id = ? AND papelera = 1',
-            [$usuarioId]
-        ), 's3_key');
+        // así que basta con borrar todo lo que tenga papelera = true.
+        $filtro = ['usuario_id' => $usuarioId, 'papelera' => true];
+        $rutas = $this->rutas($filtro);
 
-        DB::transaction(function () use ($usuarioId) {
-            DB::delete('DELETE FROM archivos WHERE usuario_id = ? AND papelera = 1', [$usuarioId]);
-            $this->borrarCarpetasDeHojasARaiz('usuario_id = ? AND papelera = 1', [$usuarioId]);
+        $this->transaccion(function (Session $sesion) use ($filtro) {
+            $this->base->archivos->deleteMany($filtro, ['session' => $sesion]);
+            $this->base->carpetas->deleteMany($filtro, ['session' => $sesion]);
         });
 
-        $this->borrarDeS3($claves);
+        $this->borrarDelDisco($rutas);
 
         return response()->json(['mensaje' => 'Papelera vaciada.']);
     }
@@ -267,74 +275,104 @@ class PapeleraController extends Controller
     // ---------------------------------------------------------------------
 
     /**
+     * Etapas que dejan pasar un elemento si no tiene carpeta padre, si su padre está
+     * activo o si su padre se eliminó en otra operación (otra fecha_papelera).
+     * Es el LEFT JOIN carpetas p ... WHERE (p.id IS NULL OR ...) de MySQL.
+     */
+    private function soloPrincipales(): array
+    {
+        return [
+            ['$lookup' => [
+                'from' => 'carpetas',
+                'localField' => 'carpeta_padre',
+                'foreignField' => '_id',
+                'as' => 'padre',
+            ]],
+            ['$match' => ['$expr' => ['$or' => [
+                ['$eq' => [['$size' => '$padre'], 0]],
+                ['$eq' => [['$first' => '$padre.papelera'], false]],
+                ['$ne' => [['$first' => '$padre.fecha_papelera'], '$fecha_papelera']],
+            ]]]],
+        ];
+    }
+
+    /**
      * Id de la carpeta y de sus subcarpetas (a cualquier profundidad).
-     * $condicion filtra por qué subcarpetas se sigue bajando (alias "c").
+     * $graphLookup baja por carpeta_padre (equivalente al WITH RECURSIVE de MySQL);
+     * $condicion decide por qué subcarpetas se sigue bajando (restrictSearchWithMatch).
      */
-    private function idsDescendientes(string $id, string $condicion = '1 = 1', array $parametros = []): array
+    private function idsDescendientes(string $id, array $condicion = [], ?Session $sesion = null): array
     {
-        $filas = DB::select(
-            "WITH RECURSIVE arbol AS (
-                SELECT id FROM carpetas WHERE id = ?
-                UNION ALL
-                SELECT c.id FROM carpetas c
-                JOIN arbol a ON c.carpeta_padre = a.id
-                WHERE $condicion
-            )
-            SELECT id FROM arbol",
-            [$id, ...$parametros]
-        );
+        $busqueda = [
+            'from' => 'carpetas',
+            'startWith' => '$_id',
+            'connectFromField' => '_id',
+            'connectToField' => 'carpeta_padre',
+            'as' => 'descendientes',
+        ];
 
-        return array_column($filas, 'id');
+        if ($condicion !== []) {
+            $busqueda['restrictSearchWithMatch'] = $condicion;
+        }
+
+        $resultado = $this->base->carpetas->aggregate([
+            ['$match' => ['_id' => $id]],
+            ['$graphLookup' => $busqueda],
+            ['$project' => ['ids' => '$descendientes._id']],
+        ], $sesion ? ['session' => $sesion] : [])->toArray();
+
+        return $resultado === [] ? [] : [$id, ...$resultado[0]->ids];
     }
 
     /**
-     * Borra carpetas empezando por las que no tienen subcarpetas y subiendo nivel
-     * por nivel. MySQL limita las cascadas a 15 niveles, así nunca se llega a ese límite.
+     * Ejecuta $trabajo en una transacción. with_transaction reintenta solo si
+     * MongoDB reporta un error transitorio (por ejemplo, un conflicto de escritura).
      */
-    private function borrarCarpetasDeHojasARaiz(string $condicion, array $parametros): void
+    private function transaccion(callable $trabajo): void
     {
-        do {
-            $borradas = DB::delete(
-                "DELETE FROM carpetas
-                 WHERE $condicion
-                   AND id NOT IN (
-                       SELECT carpeta_padre FROM (
-                           SELECT carpeta_padre FROM carpetas WHERE carpeta_padre IS NOT NULL
-                       ) AS padres
-                   )",
-                $parametros
-            );
-        } while ($borradas > 0);
+        $sesion = app(Client::class)->startSession();
+
+        try {
+            with_transaction($sesion, $trabajo);
+        } finally {
+            $sesion->endSession();
+        }
+    }
+
+    private function rutas(array $filtro): array
+    {
+        $archivos = $this->base->archivos->find($filtro, ['projection' => ['ruta' => 1]]);
+
+        return array_map(fn ($archivo) => $archivo->ruta, $archivos->toArray());
     }
 
     /**
-     * Se borra de S3 después de confirmar la BD: si S3 falla, el registro ya no existe
-     * y el objeto huérfano queda en el log para borrarlo a mano.
+     * Se borra del disco después de confirmar la BD: si el disco falla, el documento ya
+     * no existe y el archivo huérfano queda en el log para borrarlo a mano.
      */
-    private function borrarDeS3(array $claves): void
+    private function borrarDelDisco(array $rutas): void
     {
-        if ($claves === []) {
+        if ($rutas === []) {
             return;
         }
 
-        if (! Storage::disk()->delete($claves)) {
-            Log::warning('No se pudieron borrar algunos objetos de S3.', ['claves' => $claves]);
+        if (! Storage::disk()->delete($rutas)) {
+            Log::warning('No se pudieron borrar algunos archivos del disco.', ['rutas' => $rutas]);
         }
     }
 
-    private function carpetaEnPapelera(string $id, int $usuarioId): ?object
+    private function carpetaEnPapelera(string $id, ObjectId $usuarioId): ?object
     {
-        return DB::selectOne(
-            'SELECT id, carpeta_padre, nombre, fecha_papelera
-             FROM carpetas WHERE id = ? AND usuario_id = ? AND papelera = 1',
-            [$id, $usuarioId]
+        return $this->base->carpetas->findOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId, 'papelera' => true],
+            ['projection' => ['carpeta_padre' => 1, 'nombre' => 1, 'fecha_papelera' => 1]]
         );
     }
 
     /**
      * La carpeta original si sigue activa; si no, la raíz (null).
      */
-    private function destinoRestauracion(?string $padreId, int $usuarioId): ?string
+    private function destinoRestauracion(?string $padreId, ObjectId $usuarioId): ?string
     {
         if ($padreId === null) {
             return null;
@@ -346,16 +384,14 @@ class PapeleraController extends Controller
     /**
      * "Tareas" -> "Tareas (1)", "Tareas (2)"... si ya hay una carpeta activa con ese nombre.
      */
-    private function nombreLibre(string $nombre, ?string $padreId, int $usuarioId): string
+    private function nombreLibre(string $nombre, ?string $padreId, ObjectId $usuarioId): string
     {
-        [$filtroPadre, $parametrosPadre] = $this->filtroPadre($padreId);
         $candidato = $nombre;
 
         for ($i = 1; ; $i++) {
-            $existe = DB::selectOne(
-                "SELECT id FROM carpetas
-                 WHERE usuario_id = ? AND $filtroPadre AND papelera = 0 AND nombre = ?",
-                [$usuarioId, ...$parametrosPadre, $candidato]
+            $existe = $this->base->carpetas->findOne(
+                ['usuario_id' => $usuarioId, 'carpeta_padre' => $padreId, 'papelera' => false, 'nombre' => $candidato],
+                ['projection' => ['_id' => 1]]
             );
 
             if (! $existe) {
@@ -364,13 +400,5 @@ class PapeleraController extends Controller
 
             $candidato = mb_substr($nombre, 0, 240)." ($i)";
         }
-    }
-
-    /**
-     * "?, ?, ?" para usar un arreglo dentro de IN (...).
-     */
-    private function marcas(array $valores): string
-    {
-        return implode(', ', array_fill(0, count($valores), '?'));
     }
 }

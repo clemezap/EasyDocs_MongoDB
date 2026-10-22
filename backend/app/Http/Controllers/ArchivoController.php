@@ -5,16 +5,16 @@ namespace App\Http\Controllers;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use MongoDB\BSON\ObjectId;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class ArchivoController extends Controller
 {
     /**
-     * Sube UN archivo a S3 y guarda su registro.
+     * Sube UN archivo al disco y guarda su documento.
      * El frontend manda una petición por archivo para mostrar el progreso de cada uno.
      */
     public function subir(Request $request): JsonResponse
@@ -45,11 +45,11 @@ class ArchivoController extends Controller
 
         $id = (string) Str::uuid7();
         $extension = $this->extension($nombre);
-        $s3Key = "usuarios/{$usuarioId}/{$id}".($extension ? ".{$extension}" : '');
+        $ruta = "usuarios/{$usuarioId}/{$id}".($extension ? ".{$extension}" : '');
 
-        // 1. Primero el objeto en S3...
+        // 1. Primero el archivo en el disco...
         $flujo = fopen($archivo->getRealPath(), 'r');
-        $guardado = $this->disco()->put($s3Key, $flujo, ['ContentType' => $tipoMime]);
+        $guardado = $this->disco()->put($ruta, $flujo);
 
         if (is_resource($flujo)) {
             fclose($flujo);
@@ -59,27 +59,41 @@ class ArchivoController extends Controller
             return response()->json(['message' => 'No se pudo guardar el archivo. Intenta de nuevo.'], 500);
         }
 
-        // 2. ...después el registro. Si la BD falla, se borra de S3 para no dejar basura.
+        // 2. ...después el documento. Si la BD falla, se borra del disco para no dejar basura.
+        $ahora = $this->ahora();
+
         try {
-            DB::insert(
-                'INSERT INTO archivos (id, usuario_id, carpeta_padre, nombre, s3_key, tipo_mime, tamano)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [$id, $usuarioId, $padreId, $nombre, $s3Key, $tipoMime, $tamano]
-            );
+            $this->base->archivos->insertOne([
+                '_id' => $id,
+                'usuario_id' => $usuarioId,
+                'carpeta_padre' => $padreId,
+                'nombre' => $nombre,
+                'ruta' => $ruta,
+                'tipo_mime' => $tipoMime,
+                'tamano' => $tamano,
+                'papelera' => false,
+                'fecha_papelera' => null,
+                'creado_en' => $ahora,
+                'actualizado_en' => $ahora,
+                // (object) para que se guarde como subdocumento {} y no como arreglo []
+                'metadatos' => (object) [],
+                'compartidos' => [],
+                'enlaces_publicos' => [],
+            ]);
         } catch (Throwable $e) {
-            $this->disco()->delete($s3Key);
+            $this->disco()->delete($ruta);
             throw $e;
         }
 
-        return response()->json(['archivo' => $this->archivoPropio($id, $usuarioId)], 201);
+        return response()->json(['archivo' => $this->json($this->archivoPropio($id, $usuarioId))], 201);
     }
 
     /**
      * Descarga un archivo propio o compartido con el usuario.
      *
      * El archivo pasa por Laravel: se valida la sesión en cada descarga y nunca se
-     * genera un enlace de S3 que alguien pueda copiar y abrir sin cuenta.
-     * Siempre se descarga (attachment), nunca se muestra en el navegador.
+     * expone la ubicación real del archivo. Siempre se descarga (attachment),
+     * nunca se muestra en el navegador.
      */
     public function descargar(Request $request, string $id): Response
     {
@@ -89,14 +103,14 @@ class ArchivoController extends Controller
             return $this->noEncontrado('El archivo no existe o no tienes acceso.');
         }
 
-        if (! $this->disco()->exists($archivo->s3_key)) {
+        if (! $this->disco()->exists($archivo->ruta)) {
             return $this->noEncontrado('El archivo ya no está disponible en el almacenamiento.');
         }
 
         // Archivos grandes: que PHP no corte la transferencia a la mitad
         set_time_limit(0);
 
-        return $this->disco()->download($archivo->s3_key, $archivo->nombre, [
+        return $this->disco()->download($archivo->ruta, $archivo->nombre, [
             'Content-Type' => $archivo->tipo_mime,
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
@@ -127,7 +141,10 @@ class ArchivoController extends Controller
             return $this->errorValidacion('nombre', 'El nombre es obligatorio.');
         }
 
-        DB::update('UPDATE archivos SET nombre = ? WHERE id = ?', [$nombre, $id]);
+        $this->base->archivos->updateOne(
+            ['_id' => $id],
+            ['$set' => ['nombre' => $nombre, 'actualizado_en' => $this->ahora()]]
+        );
 
         return response()->json(['archivo' => ['id' => $id, 'nombre' => $nombre]]);
     }
@@ -135,7 +152,7 @@ class ArchivoController extends Controller
     /**
      * Mueve un archivo a otra carpeta (o a la raíz con carpeta_padre = null).
      * Solo el dueño puede moverlo, y solo a una carpeta suya que no esté en la papelera.
-     * En S3 no cambia nada: la ubicación solo existe en la base de datos.
+     * En el disco no cambia nada: la ubicación solo existe en la base de datos.
      */
     public function mover(Request $request, string $id): JsonResponse
     {
@@ -156,9 +173,9 @@ class ArchivoController extends Controller
             return $this->noEncontrado('La carpeta de destino no existe.');
         }
 
-        DB::update(
-            'UPDATE archivos SET carpeta_padre = ? WHERE id = ? AND usuario_id = ?',
-            [$destino, $id, $usuarioId]
+        $this->base->archivos->updateOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId],
+            ['$set' => ['carpeta_padre' => $destino, 'actualizado_en' => $this->ahora()]]
         );
 
         return response()->json([
@@ -170,45 +187,53 @@ class ArchivoController extends Controller
     /**
      * Archivo activo del que el usuario es dueño, o null.
      */
-    private function archivoPropio(string $id, int $usuarioId): ?object
+    private function archivoPropio(string $id, ObjectId $usuarioId): ?object
     {
-        return DB::selectOne(
-            'SELECT id, carpeta_padre, nombre, tipo_mime, tamano, creado_en, actualizado_en
-             FROM archivos
-             WHERE id = ? AND usuario_id = ? AND papelera = 0',
-            [$id, $usuarioId]
+        return $this->base->archivos->findOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId, 'papelera' => false],
+            ['projection' => [
+                'carpeta_padre' => 1, 'nombre' => 1, 'tipo_mime' => 1, 'tamano' => 1,
+                'creado_en' => 1, 'actualizado_en' => 1,
+            ]]
         );
     }
 
     /**
      * Archivo activo que el usuario puede ver: es el dueño O se lo compartieron.
+     * Antes era un LEFT JOIN con archivos_compartidos; ahora la compartición está
+     * dentro del mismo documento.
      */
-    private function archivoAccesible(string $id, int $usuarioId): ?object
+    private function archivoAccesible(string $id, ObjectId $usuarioId): ?object
     {
-        return DB::selectOne(
-            'SELECT a.id, a.nombre, a.s3_key, a.tipo_mime
-             FROM archivos a
-             LEFT JOIN archivos_compartidos ac
-                    ON ac.archivo_id = a.id AND ac.usuario_id = ?
-             WHERE a.id = ? AND a.papelera = 0
-               AND (a.usuario_id = ? OR ac.id IS NOT NULL)',
-            [$usuarioId, $id, $usuarioId]
+        return $this->base->archivos->findOne(
+            [
+                '_id' => $id,
+                'papelera' => false,
+                '$or' => [
+                    ['usuario_id' => $usuarioId],
+                    ['compartidos.usuario_id' => $usuarioId],
+                ],
+            ],
+            ['projection' => ['nombre' => 1, 'ruta' => 1, 'tipo_mime' => 1]]
         );
     }
 
     /**
      * Archivo activo que el usuario puede modificar: es el dueño O tiene permiso de escritura.
+     * $elemMatch exige que usuario y permiso estén en el MISMO elemento del arreglo.
      */
-    private function archivoEditable(string $id, int $usuarioId): ?object
+    private function archivoEditable(string $id, ObjectId $usuarioId): ?object
     {
-        return DB::selectOne(
-            "SELECT a.id
-             FROM archivos a
-             LEFT JOIN archivos_compartidos ac
-                    ON ac.archivo_id = a.id AND ac.usuario_id = ? AND ac.permiso = 'escritura'
-             WHERE a.id = ? AND a.papelera = 0
-               AND (a.usuario_id = ? OR ac.id IS NOT NULL)",
-            [$usuarioId, $id, $usuarioId]
+        return $this->base->archivos->findOne(
+            [
+                '_id' => $id,
+                'papelera' => false,
+                '$or' => [
+                    ['usuario_id' => $usuarioId],
+                    ['compartidos' => ['$elemMatch' => ['usuario_id' => $usuarioId, 'permiso' => 'escritura']]],
+                ],
+            ],
+            ['projection' => ['_id' => 1]]
         );
     }
 

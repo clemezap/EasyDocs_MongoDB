@@ -4,19 +4,21 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use MongoDB\BSON\ObjectId;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Enlaces públicos: cualquiera con el enlace puede ver el archivo, sin iniciar sesión.
  *
+ * - Viven en el arreglo "enlaces_publicos" del archivo (antes tabla aparte).
  * - Solo el dueño crea y desactiva el enlace. Un archivo tiene a lo más un enlace activo.
- * - Desactivar no borra la fila (activo = 0, revocado_en = fecha): queda el historial.
- * - El enlace usa un token aleatorio de 64 caracteres, imposible de adivinar.
+ * - Desactivar no saca el elemento (activo = false, revocado_en = fecha): queda el historial.
+ * - El enlace usa un token aleatorio de 64 caracteres, imposible de adivinar; el índice
+ *   único uq_archivos_enlace_token garantiza que no se repita entre archivos.
  * - El archivo pasa por Laravel: al desactivar el enlace deja de funcionar al instante,
- *   y nunca se expone una URL de S3.
+ *   y nunca se expone la ubicación real del archivo.
  * - Si el dueño manda el archivo a la papelera, el enlace deja de funcionar
  *   (y vuelve a funcionar si lo restaura).
  */
@@ -37,48 +39,59 @@ class EnlacePublicoController extends Controller
 
     public function ver(Request $request, string $archivoId): JsonResponse
     {
-        $usuarioId = $this->usuarioId($request);
+        $archivo = $this->archivoPropio($archivoId, $this->usuarioId($request));
 
-        if (! $this->archivoPropio($archivoId, $usuarioId)) {
+        if (! $archivo) {
             return $this->noEncontrado('El archivo no existe.');
         }
 
-        return response()->json(['enlace' => $this->enlaceActivo($archivoId)]);
+        return response()->json(['enlace' => $this->enlaceActivo($archivo)]);
     }
 
     public function crear(Request $request, string $archivoId): JsonResponse
     {
-        $usuarioId = $this->usuarioId($request);
+        $archivo = $this->archivoPropio($archivoId, $this->usuarioId($request));
 
-        if (! $this->archivoPropio($archivoId, $usuarioId)) {
+        if (! $archivo) {
             return $this->noEncontrado('El archivo no existe.');
         }
 
         // Si ya hay uno activo, se devuelve el mismo
-        if ($enlace = $this->enlaceActivo($archivoId)) {
+        if ($enlace = $this->enlaceActivo($archivo)) {
             return response()->json(['enlace' => $enlace]);
         }
 
-        DB::insert(
-            'INSERT INTO enlaces_publicos (id, archivo_id, token) VALUES (?, ?, ?)',
-            [(string) Str::uuid7(), $archivoId, bin2hex(random_bytes(32))]
+        // El filtro evita que dos peticiones al mismo tiempo dejen dos enlaces activos
+        $this->base->archivos->updateOne(
+            ['_id' => $archivoId, 'enlaces_publicos.activo' => ['$ne' => true]],
+            ['$push' => ['enlaces_publicos' => [
+                'id' => (string) Str::uuid7(),
+                'token' => bin2hex(random_bytes(32)),
+                'activo' => true,
+                'creado_en' => $this->ahora(),
+                'revocado_en' => null,
+            ]]]
         );
 
-        return response()->json(['enlace' => $this->enlaceActivo($archivoId)], 201);
+        $archivo = $this->archivoPropio($archivoId, $this->usuarioId($request));
+
+        return response()->json(['enlace' => $this->enlaceActivo($archivo)], 201);
     }
 
     public function desactivar(Request $request, string $archivoId): JsonResponse
     {
-        $usuarioId = $this->usuarioId($request);
-
-        if (! $this->archivoPropio($archivoId, $usuarioId)) {
+        if (! $this->archivoPropio($archivoId, $this->usuarioId($request))) {
             return $this->noEncontrado('El archivo no existe.');
         }
 
-        DB::update(
-            'UPDATE enlaces_publicos SET activo = 0, revocado_en = ?
-             WHERE archivo_id = ? AND activo = 1',
-            [now()->format('Y-m-d H:i:s'), $archivoId]
+        // arrayFilters: cambia solo los elementos del arreglo que siguen activos
+        $this->base->archivos->updateOne(
+            ['_id' => $archivoId],
+            ['$set' => [
+                'enlaces_publicos.$[enlace].activo' => false,
+                'enlaces_publicos.$[enlace].revocado_en' => $this->ahora(),
+            ]],
+            ['arrayFilters' => [['enlace.activo' => true]]]
         );
 
         return response()->json(['enlace' => null]);
@@ -89,15 +102,16 @@ class EnlacePublicoController extends Controller
      */
     public function abrir(string $token): Response
     {
-        $archivo = DB::selectOne(
-            'SELECT a.nombre, a.s3_key, a.tipo_mime
-             FROM enlaces_publicos e
-             JOIN archivos a ON a.id = e.archivo_id
-             WHERE e.token = ? AND e.activo = 1 AND a.papelera = 0',
-            [$token]
+        // $elemMatch: token y activo deben ser del MISMO enlace del arreglo
+        $archivo = $this->base->archivos->findOne(
+            [
+                'enlaces_publicos' => ['$elemMatch' => ['token' => $token, 'activo' => true]],
+                'papelera' => false,
+            ],
+            ['projection' => ['nombre' => 1, 'ruta' => 1, 'tipo_mime' => 1]]
         );
 
-        if (! $archivo || ! Storage::disk()->exists($archivo->s3_key)) {
+        if (! $archivo || ! Storage::disk()->exists($archivo->ruta)) {
             return redirect('/paginas/enlace-no-disponible.html');
         }
 
@@ -106,7 +120,7 @@ class EnlacePublicoController extends Controller
         $visible = in_array($archivo->tipo_mime, self::TIPOS_VISIBLES, true);
 
         return Storage::disk()->response(
-            $archivo->s3_key,
+            $archivo->ruta,
             $archivo->nombre,
             [
                 'Content-Type' => $visible ? $archivo->tipo_mime : 'application/octet-stream',
@@ -119,19 +133,25 @@ class EnlacePublicoController extends Controller
         );
     }
 
-    private function enlaceActivo(string $archivoId): ?object
+    /**
+     * El enlace activo del archivo ({token, creado_en}) o null.
+     */
+    private function enlaceActivo(object $archivo): ?array
     {
-        return DB::selectOne(
-            'SELECT token, creado_en FROM enlaces_publicos WHERE archivo_id = ? AND activo = 1',
-            [$archivoId]
-        );
+        foreach ($archivo->enlaces_publicos as $enlace) {
+            if ($enlace->activo) {
+                return $this->json(['token' => $enlace->token, 'creado_en' => $enlace->creado_en]);
+            }
+        }
+
+        return null;
     }
 
-    private function archivoPropio(string $id, int $usuarioId): ?object
+    private function archivoPropio(string $id, ObjectId $usuarioId): ?object
     {
-        return DB::selectOne(
-            'SELECT id FROM archivos WHERE id = ? AND usuario_id = ? AND papelera = 0',
-            [$id, $usuarioId]
+        return $this->base->archivos->findOne(
+            ['_id' => $id, 'usuario_id' => $usuarioId, 'papelera' => false],
+            ['projection' => ['enlaces_publicos' => 1]]
         );
     }
 }

@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Los archivos solo se entregan por los controladores (que revisan
+            // permisos), nunca por la ruta /storage de Laravel
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

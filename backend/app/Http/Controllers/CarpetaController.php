@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use MongoDB\BSON\ObjectId;
+use Throwable;
 
 class CarpetaController extends Controller
 {
@@ -31,31 +32,35 @@ class CarpetaController extends Controller
             $ruta = $this->ruta($carpetaId, $usuarioId);
         }
 
-        [$filtroPadre, $parametrosPadre] = $this->filtroPadre($carpetaId);
+        $filtro = ['usuario_id' => $usuarioId, 'carpeta_padre' => $carpetaId, 'papelera' => false];
 
-        $carpetas = DB::select(
-            "SELECT id, nombre, creado_en, actualizado_en
-             FROM carpetas
-             WHERE usuario_id = ? AND $filtroPadre AND papelera = 0
-             ORDER BY nombre",
-            [$usuarioId, ...$parametrosPadre]
-        );
+        // El orden por nombre usa la intercalación de la colección (sin distinguir mayúsculas)
+        $carpetas = $this->base->carpetas->find($filtro, [
+            'projection' => ['nombre' => 1, 'creado_en' => 1, 'actualizado_en' => 1],
+            'sort' => ['nombre' => 1],
+        ]);
 
-        $archivos = DB::select(
-            "SELECT a.id, a.nombre, a.tipo_mime, a.tamano, a.creado_en, a.actualizado_en,
-                    EXISTS (SELECT 1 FROM archivos_compartidos ac WHERE ac.archivo_id = a.id) AS compartido,
-                    EXISTS (SELECT 1 FROM enlaces_publicos e WHERE e.archivo_id = a.id AND e.activo = 1) AS enlace_publico
-             FROM archivos a
-             WHERE a.usuario_id = ? AND a.$filtroPadre AND a.papelera = 0
-             ORDER BY a.nombre",
-            [$usuarioId, ...$parametrosPadre]
-        );
+        // compartido y enlace_publico salen del mismo documento: antes eran dos
+        // subconsultas EXISTS sobre otras tablas
+        $archivos = $this->base->archivos->aggregate([
+            ['$match' => $filtro],
+            ['$sort' => ['nombre' => 1]],
+            ['$project' => [
+                'nombre' => 1,
+                'tipo_mime' => 1,
+                'tamano' => 1,
+                'creado_en' => 1,
+                'actualizado_en' => 1,
+                'compartido' => ['$gt' => [['$size' => '$compartidos'], 0]],
+                'enlace_publico' => ['$in' => [true, '$enlaces_publicos.activo']],
+            ]],
+        ]);
 
         return response()->json([
-            'carpeta' => $carpeta,
+            'carpeta' => $this->json($carpeta),
             'ruta' => $ruta,
-            'carpetas' => $carpetas,
-            'archivos' => $archivos,
+            'carpetas' => $this->json($carpetas->toArray()),
+            'archivos' => $this->json($archivos->toArray()),
         ]);
     }
 
@@ -84,13 +89,29 @@ class CarpetaController extends Controller
         }
 
         $id = (string) Str::uuid7();
+        $ahora = $this->ahora();
 
-        DB::insert(
-            'INSERT INTO carpetas (id, usuario_id, carpeta_padre, nombre) VALUES (?, ?, ?, ?)',
-            [$id, $usuarioId, $padreId, $nombre]
-        );
+        // El índice único uq_carpetas_nombre_activo cubre dos peticiones al mismo tiempo
+        try {
+            $this->base->carpetas->insertOne([
+                '_id' => $id,
+                'usuario_id' => $usuarioId,
+                'carpeta_padre' => $padreId,
+                'nombre' => $nombre,
+                'papelera' => false,
+                'fecha_papelera' => null,
+                'creado_en' => $ahora,
+                'actualizado_en' => $ahora,
+            ]);
+        } catch (Throwable $e) {
+            if ($this->esDuplicado($e)) {
+                return $this->errorValidacion('nombre', 'Ya existe una carpeta con ese nombre aquí.');
+            }
 
-        return response()->json(['carpeta' => $this->carpetaActiva($id, $usuarioId)], 201);
+            throw $e;
+        }
+
+        return response()->json(['carpeta' => $this->json($this->carpetaActiva($id, $usuarioId))], 201);
     }
 
     public function renombrar(Request $request, string $id): JsonResponse
@@ -116,12 +137,20 @@ class CarpetaController extends Controller
             return $this->errorValidacion('nombre', 'Ya existe una carpeta con ese nombre aquí.');
         }
 
-        DB::update(
-            'UPDATE carpetas SET nombre = ? WHERE id = ? AND usuario_id = ?',
-            [$nombre, $id, $usuarioId]
-        );
+        try {
+            $this->base->carpetas->updateOne(
+                ['_id' => $id, 'usuario_id' => $usuarioId],
+                ['$set' => ['nombre' => $nombre, 'actualizado_en' => $this->ahora()]]
+            );
+        } catch (Throwable $e) {
+            if ($this->esDuplicado($e)) {
+                return $this->errorValidacion('nombre', 'Ya existe una carpeta con ese nombre aquí.');
+            }
 
-        return response()->json(['carpeta' => $this->carpetaActiva($id, $usuarioId)]);
+            throw $e;
+        }
+
+        return response()->json(['carpeta' => $this->json($this->carpetaActiva($id, $usuarioId))]);
     }
 
     /**
@@ -164,10 +193,18 @@ class CarpetaController extends Controller
             return $this->errorValidacion('carpeta_padre', 'Ya existe una carpeta con ese nombre en el destino.');
         }
 
-        DB::update(
-            'UPDATE carpetas SET carpeta_padre = ? WHERE id = ? AND usuario_id = ?',
-            [$destino, $id, $usuarioId]
-        );
+        try {
+            $this->base->carpetas->updateOne(
+                ['_id' => $id, 'usuario_id' => $usuarioId],
+                ['$set' => ['carpeta_padre' => $destino, 'actualizado_en' => $this->ahora()]]
+            );
+        } catch (Throwable $e) {
+            if ($this->esDuplicado($e)) {
+                return $this->errorValidacion('carpeta_padre', 'Ya existe una carpeta con ese nombre en el destino.');
+            }
+
+            throw $e;
+        }
 
         return response()->json([
             'carpeta' => ['id' => $id, 'carpeta_padre' => $destino],
@@ -177,39 +214,54 @@ class CarpetaController extends Controller
 
     /**
      * Carpetas desde la raíz hasta la carpeta indicada (para la barra de navegación).
-     * Sube por carpeta_padre con una consulta recursiva.
+     * $graphLookup sube por carpeta_padre: es el equivalente del WITH RECURSIVE de MySQL.
+     * depthField numera a los ancestros (0 = el padre directo).
      */
-    private function ruta(string $carpetaId, int $usuarioId): array
+    private function ruta(string $carpetaId, ObjectId $usuarioId): array
     {
-        return DB::select(
-            'WITH RECURSIVE ruta AS (
-                SELECT id, nombre, carpeta_padre, 0 AS nivel
-                FROM carpetas
-                WHERE id = ? AND usuario_id = ?
-                UNION ALL
-                SELECT c.id, c.nombre, c.carpeta_padre, r.nivel + 1
-                FROM carpetas c
-                JOIN ruta r ON c.id = r.carpeta_padre
-            )
-            SELECT id, nombre FROM ruta ORDER BY nivel DESC',
-            [$carpetaId, $usuarioId]
+        $resultado = $this->base->carpetas->aggregate([
+            ['$match' => ['_id' => $carpetaId, 'usuario_id' => $usuarioId]],
+            ['$graphLookup' => [
+                'from' => 'carpetas',
+                'startWith' => '$carpeta_padre',
+                'connectFromField' => 'carpeta_padre',
+                'connectToField' => '_id',
+                'as' => 'ancestros',
+                'depthField' => 'nivel',
+            ]],
+        ])->toArray();
+
+        if ($resultado === []) {
+            return [];
+        }
+
+        $carpeta = $resultado[0];
+        $ancestros = $carpeta->ancestros;
+
+        // Del más lejano (la carpeta en la raíz) al padre directo
+        usort($ancestros, fn ($a, $b) => $b->nivel <=> $a->nivel);
+
+        return array_map(
+            fn ($c) => ['id' => $c->_id, 'nombre' => $c->nombre],
+            [...$ancestros, $carpeta]
         );
     }
 
-    private function nombreRepetido(string $nombre, ?string $padreId, int $usuarioId, ?string $excluirId = null): bool
+    private function nombreRepetido(string $nombre, ?string $padreId, ObjectId $usuarioId, ?string $excluirId = null): bool
     {
-        [$filtroPadre, $parametrosPadre] = $this->filtroPadre($padreId);
-
-        $sql = "SELECT id FROM carpetas
-                WHERE usuario_id = ? AND $filtroPadre AND papelera = 0 AND nombre = ?";
-        $parametros = [$usuarioId, ...$parametrosPadre, $nombre];
+        // La intercalación de la colección hace que "Tareas" y "tareas" coincidan, como en MySQL
+        $filtro = [
+            'usuario_id' => $usuarioId,
+            'carpeta_padre' => $padreId,
+            'papelera' => false,
+            'nombre' => $nombre,
+        ];
 
         if ($excluirId !== null) {
-            $sql .= ' AND id <> ?';
-            $parametros[] = $excluirId;
+            $filtro['_id'] = ['$ne' => $excluirId];
         }
 
-        return DB::selectOne($sql, $parametros) !== null;
+        return $this->base->carpetas->findOne($filtro, ['projection' => ['_id' => 1]]) !== null;
     }
 
     private function mensajes(): array
