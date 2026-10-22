@@ -963,11 +963,12 @@ select {
     margin-top: 4px;
 }
 
-/* Toast al subir archivos (abajo a la izquierda; el progreso va a la derecha) */
+/* Toast al subir archivos (en el centro de la pantalla) */
 .toast-metadatos {
     position: fixed;
-    left: 16px;
-    bottom: 16px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     z-index: 25;
     width: min(480px, calc(100% - 32px));
     max-height: calc(100vh - 32px);
@@ -1079,13 +1080,6 @@ select {
 
     .metadato .metadato-valor {
         grid-column: 1 / -1;
-    }
-
-    /* El toast arriba para no tapar el progreso de la subida */
-    .toast-metadatos {
-        top: 16px;
-        bottom: auto;
-        max-height: 60vh;
     }
 }
 

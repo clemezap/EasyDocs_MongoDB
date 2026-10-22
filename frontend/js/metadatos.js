@@ -12,33 +12,14 @@ const TIPOS_METADATO = {
     lista: 'Lista',
 };
 
-// Nombres sugeridos y el tipo que se elige al escribirlos
-const SUGERENCIAS_METADATOS = {
-    'Autor': 'texto',
-    'Fecha de publicación': 'fecha',
-    'Serie': 'texto',
-    'Clasificación': 'texto',
-    'Etiquetas': 'lista',
-    'Idioma': 'texto',
-    'Editorial': 'texto',
-    'Páginas': 'numero',
-    'Año': 'numero',
-    'Artista': 'texto',
-    'Álbum': 'texto',
-    'Lugar': 'texto',
-    'Cámara': 'texto',
-    'Leído': 'booleano',
-};
-
 // ---------------------------------------------------------------------------
 // Editor de filas
 // ---------------------------------------------------------------------------
 
-// Devuelve { cargar(lista), agregar(), leer(), claves(), vacio() }.
+// El usuario escribe libremente el nombre de cada propiedad y elige su tipo.
+// Devuelve { cargar(lista), agregar(), leer(), vacio() }.
 // leer() -> { metadatos: [{clave, tipo, valor}], error } (error = texto o null)
 function crearEditorMetadatos(contenedor) {
-    asegurarSugerenciasMetadatos();
-
     contenedor.innerHTML = '<ul class="metadatos-filas"></ul>';
     const filas = contenedor.querySelector('ul');
 
@@ -65,7 +46,7 @@ function crearEditorMetadatos(contenedor) {
         const li = document.createElement('li');
         li.className = 'metadato';
         li.innerHTML = `
-            <input type="text" class="metadato-clave" list="sugerencias-metadatos" maxlength="64"
+            <input type="text" class="metadato-clave" maxlength="64" autocomplete="off"
                    placeholder="Nombre (ej. Autor)" aria-label="Nombre de la propiedad" value="${escaparHtml(clave)}">
             <select class="metadato-tipo" aria-label="Tipo">
                 ${Object.entries(TIPOS_METADATO).map(([valorTipo, texto]) =>
@@ -89,21 +70,6 @@ function crearEditorMetadatos(contenedor) {
     filas.addEventListener('change', (e) => {
         if (e.target.matches('.metadato-tipo')) {
             cambiarTipo(e.target.closest('.metadato'), e.target.value);
-        }
-    });
-
-    // Al elegir un nombre sugerido se pone su tipo (si aún no se escribió un valor)
-    filas.addEventListener('input', (e) => {
-        if (!e.target.matches('.metadato-clave')) return;
-
-        const fila = e.target.closest('.metadato');
-        const tipo = SUGERENCIAS_METADATOS[e.target.value.trim()];
-        const selector = fila.querySelector('.metadato-tipo');
-        const valor = fila.querySelector('.metadato-valor');
-
-        if (tipo && tipo !== selector.value && (valor.tagName === 'SELECT' || valor.value === '')) {
-            selector.value = tipo;
-            cambiarTipo(fila, tipo);
         }
     });
 
@@ -153,18 +119,6 @@ function crearEditorMetadatos(contenedor) {
         leer,
         vacio: () => filas.children.length === 0,
     };
-}
-
-// <datalist> con los nombres sugeridos (uno por página)
-function asegurarSugerenciasMetadatos() {
-    if (document.getElementById('sugerencias-metadatos')) return;
-
-    const lista = document.createElement('datalist');
-    lista.id = 'sugerencias-metadatos';
-    lista.innerHTML = Object.keys(SUGERENCIAS_METADATOS)
-        .map((nombre) => `<option value="${escaparHtml(nombre)}"></option>`)
-        .join('');
-    document.body.append(lista);
 }
 
 // Valor guardado -> texto para mostrar (modo solo lectura)
